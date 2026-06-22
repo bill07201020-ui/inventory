@@ -2,6 +2,10 @@
 -- 齒模假牙進度追蹤系統 — schema.sql
 -- 一次跑完：資料表、RLS、觸發器、patient_track 函式、Storage bucket
 -- 在 Supabase SQL Editor 貼上執行。
+--
+-- 所有輔助函式 / 觸發器皆以 denture_ 命名空間，且全部 additive，
+-- 可安全套用於「已有其他資料表的共用專案」而不影響既有物件
+-- （例如不會覆蓋既有的 public.handle_new_user 或 auth.users 觸發器）。
 -- =============================================================
 
 create extension if not exists "pgcrypto";
@@ -120,7 +124,7 @@ $$;
 -- =============================================================
 
 -- (1) 階段變更 → 寫 log，並維護 received_at / delivered_at
-create or replace function public.on_case_stage_change()
+create or replace function public.denture_on_case_stage_change()
 returns trigger
 language plpgsql
 as $$
@@ -141,13 +145,13 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_case_stage_change on public.cases;
-create trigger trg_case_stage_change
+drop trigger if exists trg_denture_case_stage_change on public.cases;
+create trigger trg_denture_case_stage_change
   before insert or update of stage on public.cases
-  for each row execute function public.on_case_stage_change();
+  for each row execute function public.denture_on_case_stage_change();
 
 -- (2) auth.users 新增 → 自動建 profile（org 由 admin 後續指派）
-create or replace function public.handle_new_user()
+create or replace function public.denture_handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
@@ -160,10 +164,10 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
+drop trigger if exists on_auth_user_created_denture on auth.users;
+create trigger on_auth_user_created_denture
   after insert on auth.users
-  for each row execute function public.handle_new_user();
+  for each row execute function public.denture_handle_new_user();
 
 -- =============================================================
 -- 病患查詢函式（SECURITY DEFINER：繞過 RLS，只回傳安全欄位）
@@ -215,12 +219,12 @@ alter table public.case_status_log enable row level security;
 alter table public.rate_limit      enable row level security;
 
 -- helper：目前使用者的 org / role
-create or replace function public.current_org_id()
+create or replace function public.denture_current_org_id()
 returns uuid language sql stable security definer set search_path = public as $$
   select org_id from public.profiles where id = auth.uid();
 $$;
 
-create or replace function public.current_role()
+create or replace function public.denture_current_role()
 returns org_role language sql stable security definer set search_path = public as $$
   select role from public.profiles where id = auth.uid();
 $$;
@@ -228,7 +232,7 @@ $$;
 -- profiles：本人可讀寫自己；admin 可讀全部
 drop policy if exists profiles_self on public.profiles;
 create policy profiles_self on public.profiles
-  for select using (id = auth.uid() or public.current_role() = 'admin');
+  for select using (id = auth.uid() or public.denture_current_role() = 'admin');
 
 drop policy if exists profiles_update_self on public.profiles;
 create policy profiles_update_self on public.profiles
@@ -241,27 +245,27 @@ create policy orgs_read on public.orgs
 
 drop policy if exists orgs_admin_write on public.orgs;
 create policy orgs_admin_write on public.orgs
-  for all using (public.current_role() = 'admin') with check (public.current_role() = 'admin');
+  for all using (public.denture_current_role() = 'admin') with check (public.denture_current_role() = 'admin');
 
 -- cases：同機構（診所或技工所）成員可讀寫；admin 全權
 drop policy if exists cases_member_select on public.cases;
 create policy cases_member_select on public.cases
   for select to authenticated using (
-    public.current_role() = 'admin'
-    or clinic_org_id = public.current_org_id()
-    or lab_org_id = public.current_org_id()
+    public.denture_current_role() = 'admin'
+    or clinic_org_id = public.denture_current_org_id()
+    or lab_org_id = public.denture_current_org_id()
   );
 
 drop policy if exists cases_member_write on public.cases;
 create policy cases_member_write on public.cases
   for all to authenticated using (
-    public.current_role() = 'admin'
-    or clinic_org_id = public.current_org_id()
-    or lab_org_id = public.current_org_id()
+    public.denture_current_role() = 'admin'
+    or clinic_org_id = public.denture_current_org_id()
+    or lab_org_id = public.denture_current_org_id()
   ) with check (
-    public.current_role() = 'admin'
-    or clinic_org_id = public.current_org_id()
-    or lab_org_id = public.current_org_id()
+    public.denture_current_role() = 'admin'
+    or clinic_org_id = public.denture_current_org_id()
+    or lab_org_id = public.denture_current_org_id()
   );
 
 -- case_photos：依案件所屬機構
@@ -271,18 +275,18 @@ create policy case_photos_member on public.case_photos
     exists (
       select 1 from public.cases c
       where c.case_id = case_photos.case_id and (
-        public.current_role() = 'admin'
-        or c.clinic_org_id = public.current_org_id()
-        or c.lab_org_id = public.current_org_id()
+        public.denture_current_role() = 'admin'
+        or c.clinic_org_id = public.denture_current_org_id()
+        or c.lab_org_id = public.denture_current_org_id()
       )
     )
   ) with check (
     exists (
       select 1 from public.cases c
       where c.case_id = case_photos.case_id and (
-        public.current_role() = 'admin'
-        or c.clinic_org_id = public.current_org_id()
-        or c.lab_org_id = public.current_org_id()
+        public.denture_current_role() = 'admin'
+        or c.clinic_org_id = public.denture_current_org_id()
+        or c.lab_org_id = public.denture_current_org_id()
       )
     )
   );
@@ -294,9 +298,9 @@ create policy case_status_log_member on public.case_status_log
     exists (
       select 1 from public.cases c
       where c.case_id = case_status_log.case_id and (
-        public.current_role() = 'admin'
-        or c.clinic_org_id = public.current_org_id()
-        or c.lab_org_id = public.current_org_id()
+        public.denture_current_role() = 'admin'
+        or c.clinic_org_id = public.denture_current_org_id()
+        or c.lab_org_id = public.denture_current_org_id()
       )
     )
   );
@@ -312,17 +316,17 @@ values ('case-photos', 'case-photos', false)
 on conflict (id) do nothing;
 
 -- 登入者可對自己機構案件的資料夾上傳/讀取（path 慣例：<case_id>/<stage>/<file>）
-drop policy if exists case_photos_storage_member on storage.objects;
-create policy case_photos_storage_member on storage.objects
+drop policy if exists denture_case_photos_storage_member on storage.objects;
+create policy denture_case_photos_storage_member on storage.objects
   for all to authenticated
   using (
     bucket_id = 'case-photos'
     and exists (
       select 1 from public.cases c
       where c.case_id = ((storage.foldername(name))[1])::uuid and (
-        public.current_role() = 'admin'
-        or c.clinic_org_id = public.current_org_id()
-        or c.lab_org_id = public.current_org_id()
+        public.denture_current_role() = 'admin'
+        or c.clinic_org_id = public.denture_current_org_id()
+        or c.lab_org_id = public.denture_current_org_id()
       )
     )
   )
@@ -331,9 +335,9 @@ create policy case_photos_storage_member on storage.objects
     and exists (
       select 1 from public.cases c
       where c.case_id = ((storage.foldername(name))[1])::uuid and (
-        public.current_role() = 'admin'
-        or c.clinic_org_id = public.current_org_id()
-        or c.lab_org_id = public.current_org_id()
+        public.denture_current_role() = 'admin'
+        or c.clinic_org_id = public.denture_current_org_id()
+        or c.lab_org_id = public.denture_current_org_id()
       )
     )
   );
