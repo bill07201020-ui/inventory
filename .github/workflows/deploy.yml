@@ -1,0 +1,41 @@
+name: Deploy to Cloudflare
+
+# 在 GitHub runner 上建置並部署到 Cloudflare Workers（worker 名稱見 wrangler.jsonc）。
+# 需要在 repo 設定以下 secrets（Settings → Secrets and variables → Actions）：
+#   CLOUDFLARE_API_TOKEN          建立 token：權限 Account → Workers Scripts: Edit
+#   CLOUDFLARE_ACCOUNT_ID         Cloudflare Dashboard 右側可見的 Account ID
+#   NEXT_PUBLIC_SUPABASE_URL      建置期注入（會內嵌進 bundle）
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY 建置期注入
+#   NEXT_PUBLIC_TRACK_BASE_URL    建置期注入（QR / 查詢頁 base URL）
+#
+# Runtime 機密 SUPABASE_SERVICE_ROLE_KEY 不放這裡，請在 Cloudflare 端設定一次：
+#   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# （或 Dashboard → Workers → denture-tracking → Settings → Variables and Secrets）
+
+on:
+  push:
+    branches: [claude/denture-tracking-setup-a4151t]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & deploy to Cloudflare Workers
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_TRACK_BASE_URL: ${{ secrets.NEXT_PUBLIC_TRACK_BASE_URL }}
