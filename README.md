@@ -119,3 +119,33 @@ npm install -D @types/qrcode tailwindcss postcss autoprefixer
 npm run dev
 # http://localhost:3000
 ```
+
+-----
+
+## 9. 部署到 Cloudflare Workers
+
+本專案用 [OpenNext](https://opennext.js.org/cloudflare) 轉成 Cloudflare Worker，
+worker 名稱為 `denture-tracking`（見 `wrangler.jsonc`）。
+
+### 方式 A：Git 連結（推薦，免在本機放 token）
+
+1. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Import a repository**，選此 repo。
+2. Build command：`npm run deploy`（或 `opennextjs-cloudflare build`），deploy 由 Cloudflare 接手。
+3. **環境變數**（Build / Production 都要）：
+   - 建置期注入（`NEXT_PUBLIC_*`）：`NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、`NEXT_PUBLIC_TRACK_BASE_URL`
+   - Runtime secret：`SUPABASE_SERVICE_ROLE_KEY`（設為 Secret，勿暴露）
+
+### 方式 B：本機 CLI 部署
+
+```bash
+npx wrangler login                       # 或 export CLOUDFLARE_API_TOKEN=...
+# 設定 runtime secret
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# NEXT_PUBLIC_* 需在 build 時存在（放 .env.local 或 shell env）
+npm run deploy
+```
+
+本機預覽 Worker：`npm run preview`。
+
+> 注意：`NEXT_PUBLIC_*` 會在 **build 期**被內嵌進 bundle，部署前務必確保這些值存在；
+> `SUPABASE_SERVICE_ROLE_KEY` 只走 runtime secret，不會進前端。
