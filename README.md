@@ -125,7 +125,7 @@ npm run dev
 ## 9. 部署到 Cloudflare Workers
 
 本專案用 [OpenNext](https://opennext.js.org/cloudflare) 轉成 Cloudflare Worker，
-worker 名稱為 `denture-tracking`（見 `wrangler.jsonc`）。
+worker 名稱為 `deture-tracking`（見 `wrangler.jsonc`）。
 
 ### 方式 A：Git 連結（推薦，免在本機放 token）
 

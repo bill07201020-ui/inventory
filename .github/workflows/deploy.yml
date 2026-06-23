@@ -10,11 +10,11 @@ name: Deploy to Cloudflare
 #
 # Runtime 機密 SUPABASE_SERVICE_ROLE_KEY 不放這裡，請在 Cloudflare 端設定一次：
 #   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-# （或 Dashboard → Workers → denture-tracking → Settings → Variables and Secrets）
+# （或 Dashboard → Workers → deture-tracking → Settings → Variables and Secrets）
 
 on:
   push:
-    branches: [claude/denture-tracking-setup-a4151t]
+    branches: [main, claude/denture-tracking-setup-a4151t]
   workflow_dispatch:
 
 jobs:
